@@ -1,4 +1,4 @@
-module github.com/cosmos/ledger-cosmos-go
+module github.com/stratosnet/ledger-stratos-go
 
 go 1.18
 
