@@ -20,7 +20,7 @@ import (
 	"errors"
 	"math"
 
-	ledger_go "github.com/zondax/ledger-go"
+	"github.com/zondax/ledger-go"
 )
 
 const (
@@ -31,6 +31,12 @@ const (
 	userINSGetAddrSecp256k1 = 4
 
 	userMessageChunkSize = 250
+
+	SignMode_SIGN_MODE_UNSPECIFIED       = 0
+	SignMode_SIGN_MODE_DIRECT            = 1
+	SignMode_SIGN_MODE_TEXTUAL           = 2
+	SignMode_SIGN_MODE_LEGACY_AMINO_JSON = 127
+	SignMode_SIGN_MODE_EIP_191           = 191
 )
 
 // LedgerCosmos represents a connection to the Cosmos app in a Ledger Nano S device
@@ -114,15 +120,14 @@ func (ledger *LedgerCosmos) GetVersion() (*VersionInfo, error) {
 	return &ledger.version, nil
 }
 
-// SignSECP256K1 signs a transaction using Cosmos user app. It can either use
-// SIGN_MODE_LEGACY_AMINO_JSON (P2=0) or SIGN_MODE_TEXTUAL (P2=1).
+// SignSECP256K1 signs a transaction using Cosmos user app
 // this command requires user confirmation in the device
-func (ledger *LedgerCosmos) SignSECP256K1(bip32Path []uint32, transaction []byte, p2 byte) ([]byte, error) {
+func (ledger *LedgerCosmos) SignSECP256K1(bip32Path []uint32, transaction []byte, mode int32) ([]byte, error) {
 	switch ledger.version.Major {
 	case 1:
 		return ledger.signv1(bip32Path, transaction)
 	case 2:
-		return ledger.signv2(bip32Path, transaction, p2)
+		return ledger.signv2(bip32Path, transaction, mode)
 	default:
 		return nil, errors.New("App version is not supported")
 	}
@@ -221,16 +226,22 @@ func (ledger *LedgerCosmos) signv1(bip32Path []uint32, transaction []byte) ([]by
 	return finalResponse, nil
 }
 
-func (ledger *LedgerCosmos) signv2(bip32Path []uint32, transaction []byte, p2 byte) ([]byte, error) {
+func (ledger *LedgerCosmos) signv2(bip32Path []uint32, transaction []byte, mode int32) ([]byte, error) {
 	var packetIndex byte = 1
 	var packetCount = 1 + byte(math.Ceil(float64(len(transaction))/float64(userMessageChunkSize)))
 
 	var finalResponse []byte
 
 	var message []byte
+	var p2 uint8
 
-	if p2 > 1 {
-		return nil, errors.New("only values of SIGN_MODE_LEGACY_AMINO (P2=0) and SIGN_MODE_TEXTUAL (P2=1) are allowed")
+	switch mode {
+	case SignMode_SIGN_MODE_DIRECT:
+		p2 = 2
+	case SignMode_SIGN_MODE_TEXTUAL:
+		p2 = 1
+	case SignMode_SIGN_MODE_LEGACY_AMINO_JSON:
+		p2 = 0
 	}
 
 	for packetIndex <= packetCount {
